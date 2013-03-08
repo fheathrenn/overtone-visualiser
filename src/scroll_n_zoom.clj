@@ -12,9 +12,9 @@
   \i :in
   \o :out})
 
-(def xoffset 0)
-(def yoffset 0)
-(def zoom 1)
+(def xoffset (atom 0))
+(def yoffset (atom 0))
+(def zoom (atom 1))
 
 (def xchanges {:up 0
   :down 0
@@ -47,8 +47,8 @@
      xchange (xchanges (get valid-keys the-key-pressed :null))
      ychange (ychanges (get valid-keys the-key-pressed :null))
      zoomer (zooms (get valid-keys the-key-pressed :null))]
-    (def yoffset (+ yoffset ychange))
-    (def xoffset (+ xoffset xchange))
-    (def zoom (* zoom zoomer))
+    (swap! yoffset + ychange)
+    (swap! xoffset + xchange)
+    (swap! zoom * zoomer)
   )
 )
