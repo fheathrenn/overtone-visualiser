@@ -11,31 +11,32 @@
 (def interboxspace 30)
 
 ;Synthesiser to be drawn to screen
-(defsynth foo [] (lpf (+ (sin-osc (sin-osc 440) (sin-osc 2)) (sin-osc 220)) 300))
+;(defsynth foo [] (lpf (+ (sin-osc (sin-osc 440) (sin-osc 2)) (sin-osc 220)) 300))
+(defsynth foo [pass_freq 300] (out 0 (lpf (+ (sin-osc (sin-osc 440) (sin-osc 2)) (sin-osc 220)) pass_freq)))
 
 (defn fill_widths [root]
  ;Initialise the properties map with the values required to draw the tree
- (let [ugenkids (remove number? (:args root))
-       rootwidth (max 100 (* 50 (count ugenkids)) )]
+ (let [ugenkids (remove (fn [x] (number? (val x))) (:arg-map root))
+       rootwidth (if (= (subs (str root) 0 47) "overtone.sc.machinery.ugen.sc_ugen.ControlProxy") 150 (max 100 (* 50 (count ugenkids))))]
   (if (zero? (count ugenkids))
     ;true
     (swap! properties assoc root {:cellwidth rootwidth :treewidth rootwidth :expands false})
     ;false
     (do 
-     (doseq [child ugenkids]
+     (doseq [child (vals ugenkids)]
       (fill_widths child))
      ;now the :cellwidth and :treewidth of all kids are filled in
-     (let [subtreesum (reduce + (map :treewidth (map @properties ugenkids)))
+     (let [subtreesum (reduce + (map :treewidth (map @properties (vals ugenkids))))
            subtreewidth (+ subtreesum (* interboxspace (- (count ugenkids) 1)))]
      (swap! properties assoc root {:cellwidth rootwidth :treewidth (max rootwidth subtreewidth) :expands false}))))))
 
 (defn draw_tree [r x y]
  ;Draw the tree with root r such that its left edge is at x and its top is at y.
  (let [tw (get (@properties r) :treewidth)
-       ugenkids (remove number? (:args r))
+       ugenkids (remove (fn [x] (number? (val x))) (:arg-map r))
        subtreespace (atom x)]
   (db/draw_box r (+ (* 0.5 tw) x) y properties)
-  (doseq [[child count] (map list ugenkids (range 0 (count ugenkids)))]
+  (doseq [[child count] (map list (reverse (vals ugenkids)) (range 0 (count ugenkids)))]
    ;so now count stores a from-0 count of which child we're on
    (draw_tree child @subtreespace (+ 20 (get-in (@properties r) [:tlbr :bottom])))
    (let [childcentrex (+ (* 0.5 (get (@properties child) :cellwidth))(get-in (@properties child) [:tlbr :left]))
