@@ -1,17 +1,18 @@
 (ns visualiser
   (:require [draw-box :as db]
             [scroll-n-zoom :as snzu]
-            [click-to-expand :as c2e] :reload)
-  (:use [quil.core]
-        [overtone.sc.machinery.ugen common doc]
-        [overtone.live :exclude [tan atan sqrt line scale abs log atan2 round triangle mouse-button pow sin cos asin acos mouse-y mouse-x exp ln TWO-PI ceil floor]]))
+            [click-to-expand :as c2e]
+            [quil.core :as q] :reload)
+  (:use [overtone.sc.machinery.ugen common doc]
+        [overtone.live]))
 
 (def properties (atom {}))
 (def interboxspace 30)
 
 ;Synthesiser to be drawn to screen
 ;(defsynth foo [] (lpf (+ (sin-osc (sin-osc 440) (sin-osc 2)) (sin-osc 220)) 300))
-(defsynth foo [pass_freq 300] (out 0 (lpf (+ (sin-osc (sin-osc 440)) (sin-osc 2)) (sin-osc pass_freq))))
+(defsynth foo [] (line (lpf (+ (sin-osc (sin-osc 440) (sin-osc 2)) (sin-osc 220)) 300) (lpf (+ (sin-osc (sin-osc 440) (sin-osc 2)) (sin-osc 220)) 300) (lpf (+ (sin-osc (sin-osc 440) (sin-osc 2)) (sin-osc 220)) 300) FREE))
+;(defsynth foo [pass_freq 300] (out 0 (lpf (+ (sin-osc (sin-osc 440)) (sin-osc 2)) (sin-osc pass_freq))))
 ;(defsynth foo [] (out 0 (tap "tap2" 20 (sin-osc (+ 440 (* 40 (tap "tap1" 10 (sin-osc 1))))))))
 
 ;;;
@@ -56,28 +57,27 @@
          childtopy (get-in (@properties child) [:tlbr :top])
          rootleftx (get-in (@properties r) [:tlbr :left])
          rootbottomy (get-in (@properties r) [:tlbr :bottom])]
-   (line childcentrex childtopy (+ (* 50 count) (+ 25 rootleftx)) rootbottomy))
+   (q/line childcentrex childtopy (+ (* 50 count) (+ 25 rootleftx)) rootbottomy))
    (swap! subtreespace + interboxspace)
    (swap! subtreespace + (get (@properties child) :treewidth)))))
 
 (defn setup []
-  (smooth)
-  (frame-rate 1)
-  (print "Entering fill_widths")
+  (q/smooth)
+  (q/frame-rate 1)
   (fill_widths (last (:ugens foo))))
 
 (defn draw []
-  (background 200)
-  (fill 0 0 0)
-  (text (:name foo) 100 20)
-  (scale @snzu/zoom)
-  (with-translation [@snzu/xoffset @snzu/yoffset]
+  (q/background 200)
+  (q/fill 0 0 0)
+  (q/text (str "Structure of synthesiser " (:name foo)) 150 20)
+  (q/scale @snzu/zoom)
+  (q/with-translation [@snzu/xoffset @snzu/yoffset]
     (draw_tree (last (:ugens foo)) 50 50)
   )
 )
 
 (defn mouse-press []
-  (let [agenter (c2e/identify [(mouse-x) (mouse-y)] properties)]
+  (let [agenter (c2e/identify [(q/mouse-x) (q/mouse-y)] properties)]
    (if (not= agenter :nil)
     (do 
      (let [expandable (not= 0 (count (remove map? (:args agenter))))
@@ -88,7 +88,6 @@
        :treewidth (get (@properties agenter) :treewidth)
        :expands xp
        :tlbr (get (@properties agenter) :tlbr)
-      })
-     (redraw))))))
+      }))))))
 
-(defsketch exampler :setup setup :draw draw :size [600 700] :key-typed snzu/key-press :mouse-pressed mouse-press)
+(q/defsketch exampler :setup setup :draw draw :size [600 700] :key-typed snzu/key-press :mouse-pressed mouse-press)
