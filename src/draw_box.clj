@@ -6,7 +6,7 @@
  ;Draws a box for the ugen u centred on x and with its top at y.
  (let [w (get (@properties u) :cellwidth)
        left (- x (/ w 2))
-       constargs (filter (fn [x] (number? (val x))) (:arg-map u))
+       constargs (remove (fn [x] (map? (val x))) (:arg-map u))
        midheight (+ 20 (* 15 (count constargs)))
        h (if (get (@properties u) :expands) (+ 50 midheight) 50)]
   (fill 255 255 255)
@@ -23,7 +23,7 @@
   (fill 0 0 0)
   (text (real-ugen-name u) (+ (* 0.3 w) left) (+ 15 y))
   ;input boxes
- (let [ugenkids (remove (fn [x] (number? (val x))) (:arg-map u))]
+ (let [ugenkids (filter (fn [x] (map? (val x))) (:arg-map u))]
   (doseq [[child count] (map list (reverse ugenkids) (range 0 (count ugenkids)))]
    (fill 255 255 255)
    (rect (+ (* 50 count) left) (- (+ y h) 25) 50 25)
