@@ -2,17 +2,19 @@
   (:require [draw-box :as db]
             [scroll-n-zoom :as snzu]
             [click-to-expand :as c2e]
+            [update :as u]
             [quil.core :as q] :reload)
   (:use [overtone.sc.machinery.ugen common doc]
         [overtone.live]))
 
 (def properties (atom {}))
+(def roots (atom ()))
 (def interboxspace 30)
 
 ;Synthesiser to be drawn to screen
 ;(defsynth foo [] (lpf (+ (sin-osc (sin-osc 440) (sin-osc 2)) (sin-osc 220)) 300))
-(defsynth foo [] (line (lpf (+ (sin-osc (sin-osc 440) (sin-osc 2)) (sin-osc 220)) 300) (lpf (+ (sin-osc (sin-osc 440) (sin-osc 2)) (sin-osc 220)) 300) (lpf (+ (sin-osc (sin-osc 440) (sin-osc 2)) (sin-osc 220)) 300) FREE))
-;(defsynth foo [pass_freq 300] (out 0 (lpf (+ (sin-osc (sin-osc 440)) (sin-osc 2)) (sin-osc pass_freq))))
+;(defsynth foo [] (line (lpf (+ (sin-osc (sin-osc 440) (sin-osc 2)) (sin-osc 220)) 300) (lpf (+ (sin-osc (sin-osc 440) (sin-osc 2)) (sin-osc 220)) 300) (lpf (+ (sin-osc (sin-osc 440) (sin-osc 2)) (sin-osc 220)) 300) FREE))
+(defsynth foo [pass_freq 300] (lpf (+ (sin-osc [(sin-osc 440) (saw 440)]) (sin-osc 2)) (sin-osc pass_freq)))
 ;(defsynth foo [] (out 0 (tap "tap2" 20 (sin-osc (+ 440 (* 40 (tap "tap1" 10 (sin-osc 1))))))))
 
 ;;;
@@ -27,14 +29,38 @@
 ;-then add watchers etc
 ;;;
 
+(defn discard [ugen seq] (let [isugen? (fn [x] (= ugen x))] (swap! seq (fn [oldseq] (remove isugen? oldseq)))))
+
+(defn find_roots [synth]
+  ;Return a lazyseq of ugens that are roots of the synthesiser synth. This list does not include any byproducts of taps, which are removed from the list in a process that also tags the ugens they tap with :tagged? true.
+  (let [ugenlist (reverse (get synth :ugens))
+        output (atom ugenlist)
+        discard (fn [ugen seq] (let [isugen? (fn [x] (= ugen x))] (swap! seq (fn [oldseq] (remove isugen? oldseq)))))]
+    (do
+      (doseq [node ugenlist]
+         (let [ugenkids (filter (fn [x] (map? (val x))) (:arg-map node))]
+            (doseq [kid (vals ugenkids)]
+               (discard kid output))))
+  ;now we need to remove the taps
+      (doseq [proot @output]
+        (if (= (:cmd-name (:arg-map proot)) "/overtone/tap")
+           ;then it's a tap, so
+           (do
+              (discard proot output)
+              (let [tapped (:in (:arg-map (first (:values (:arg-map proot)))))]
+                (u/update properties tapped {:tapped? true})))))
+  ;now finally we can output the list in peace
+      (reverse @output))))
 
 (defn fill_widths [root]
  ;Initialise the properties map with the values required to draw the tree
  (let [ugenkids (filter (fn [x] (map? (val x))) (:arg-map root))
-       rootwidth (if (= (subs (str root) 0 47) "overtone.sc.machinery.ugen.sc_ugen.ControlProxy") 150 (max 100 (* 50 (count ugenkids))))]
+       defaultcellwidth 100
+       controldefaultcellwidth 150
+       rootwidth (if (= (subs (str root) 0 47) "overtone.sc.machinery.ugen.sc_ugen.ControlProxy") controldefaultcellwidth (max defaultcellwidth (* 50 (count ugenkids))))]
   (if (zero? (count ugenkids))
     ;true
-    (swap! properties assoc root {:cellwidth rootwidth :treewidth rootwidth :expands false})
+    (u/update properties root {:cellwidth rootwidth :treewidth rootwidth :expands false})
     ;false
     (do 
      (doseq [child (vals ugenkids)]
@@ -42,7 +68,16 @@
      ;now the :cellwidth and :treewidth of all kids are filled in
      (let [subtreesum (reduce + (map :treewidth (map @properties (vals ugenkids))))
            subtreewidth (+ subtreesum (* interboxspace (- (count ugenkids) 1)))]
-     (swap! properties assoc root {:cellwidth rootwidth :treewidth (max rootwidth subtreewidth) :expands false}))))))
+     (u/update properties root {:cellwidth rootwidth :treewidth (max rootwidth subtreewidth) :expands false}))))))
+
+(defn draw_forest [roots x y]
+  (let [currx (atom x)]
+     (doseq [root roots]
+        (draw_tree root @currx y)
+        (swap! currx + (+ interboxspace (get (@properties root) :treewidth)))
+     )
+  )
+)
 
 (defn draw_tree [r x y]
  ;Draw the tree with root r such that its left edge is at x and its top is at y.
@@ -64,7 +99,10 @@
 (defn setup []
   (q/smooth)
   (q/frame-rate 1)
-  (fill_widths (last (:ugens foo))))
+  (reset! roots (find_roots foo))
+  (doseq [root @roots]
+    (fill_widths root))
+)
 
 (defn draw []
   (q/background 200)
@@ -72,22 +110,17 @@
   (q/text (str "Structure of synthesiser " (:name foo)) 150 20)
   (q/scale @snzu/zoom)
   (q/with-translation [@snzu/xoffset @snzu/yoffset]
-    (draw_tree (last (:ugens foo)) 50 50)
+    (draw_forest @roots 50 50)
   )
 )
 
 (defn mouse-press []
-  (let [agenter (c2e/identify [(q/mouse-x) (q/mouse-y)] properties)]
+  (let [agenter (c2e/identify (- (/ (q/mouse-x) @snzu/zoom) @snzu/xoffset) (- (/ (q/mouse-y) @snzu/zoom) @snzu/yoffset) properties)]
    (if (not= agenter :nil)
     (do 
      (let [expandable (not= 0 (count (remove map? (:args agenter))))
            newxp (not (get (@properties agenter) :expands))
            xp (if expandable newxp false)] ;can only expand a box if there is info to show
-     (swap! properties assoc agenter
-      {:cellwidth (get (@properties agenter) :cellwidth)
-       :treewidth (get (@properties agenter) :treewidth)
-       :expands xp
-       :tlbr (get (@properties agenter) :tlbr)
-      }))))))
+     (u/update properties agenter {:expands xp}))))))
 
 (q/defsketch exampler :setup setup :draw draw :size [600 700] :key-typed snzu/key-press :mouse-pressed mouse-press)
