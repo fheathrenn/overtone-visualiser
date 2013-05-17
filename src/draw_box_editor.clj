@@ -13,33 +13,43 @@
   (q/line (+ 5 x) (+ y 9) (+ 13 x) (+ 9 y))
 )
 
+(defn draw_edit_symbol [x y]
+  ;Draws an edit symbol, relative to the top right of the ugen box.
+  (q/fill 255 255 255)
+  (q/rect (- x 15) (+ 3 y) 12 12)
+  (q/fill 0 0 0)
+  (q/line (- x 12) (+ y 6) (- x 6) (+ 12 y))
+)
+
 (defn draw_box [u x y properties]
  ;Draws a box for the ugen u centred on x and with its top at y.
  (let [w (get (@properties u) :cellwidth)
        left (- x (/ w 2))
-       constargs (remove (fn [x] (= :id (first (val x)))) (:arg-map u))
-       midheight (+ 20 (* 15 (count constargs)))
+       constargs (filter (fn [x] (= :const (first (val x)))) (:arg-map u))
+       midheight (if (= (count constargs) 0) 0 (+ 20 (* 15 (count constargs))))
+       colour (if (get (@properties u) :highlight) [255 245 100] [255 255 255])
        h (if (get (@properties u) :expands) (if (get (@properties u) :tapped?) (+ 100 midheight) (+ 50 midheight)) 50)]
-  (q/fill 255 255 255)
+  (apply q/fill colour)
   (q/rect left y w h)
   ;title box
-  (q/fill 255 255 255)
+  (apply q/fill colour)
   (q/rect left y w 25)
   (q/fill 0 0 0)
   (q/text (:name u) (+ (* 0.3 w) left) (+ 15 y))
   ;move
   (draw_move_symbol left y)
+  (draw_edit_symbol (+ left w) y)
   ;input boxes
- (let [ugenkids (filter (fn [x] (= :id (first (val x)))) (:arg-map u))]
+ (let [ugenkids (remove (fn [x] (= :const (first (val x)))) (:arg-map u))]
   (doseq [[child count] (map list (reverse ugenkids) (range 0 (count ugenkids)))]
-   (q/fill 255 255 255)
+   (apply q/fill colour)
    (q/rect (+ (* 50 count) left) (- (+ y h) 25) 50 25)
    (q/fill 0 0 0)
    (q/text (name (key child)) (+ (* 50 count) (+ 5 left)) (- (+ y h) 10))
   ))
   ;middle section
   (if (get (@properties u) :expands) (do 
-   (q/fill 255 255 255)
+   (apply q/fill colour)
    (q/rect left (+ 25 y) w midheight)
    (q/fill 0 0 0)
    (doseq [[arg count] (map list (reverse constargs) (range 0 (count constargs)))]
